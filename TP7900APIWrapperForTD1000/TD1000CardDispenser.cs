@@ -34,7 +34,17 @@ namespace TP7900APIWrapperForTD1000
 
         }
 
+        public async Task<bool> RejectCurrentCard()
+        {
+
+        }
+
         public async Task<bool> AcceptCurrentCard()
+        {
+
+        }
+
+        public async Task<bool> RevertCurrentCard()
         {
 
         }
