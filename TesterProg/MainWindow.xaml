@@ -5,26 +5,73 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:TesterProg"
         mc:Ignorable="d"
-        Title="MainWindow" Height="350" Width="525">
-    <Grid>
-        <UniformGrid>
-            <Button x:Name="GetNum" Content="GetNum" Click="GetNum_Click"/>
-            <Button x:Name="GetName" Content="GetDeviceName" Click="GetName_Click"/>
-            <Button x:Name="OpenDev" Content="OpenDev" Click="OpenDev_Click"/>
-            <Button x:Name="CloseDev" Content="CloseDev" Click="CloseDev_Click"/>
-            <Button x:Name="InitDev" Content="InitDev" Click="InitDev_Click"/>
-            <Button x:Name="Get_VersionInfo" Content="Get_VersionInfo" Click="Get_VersionInfo_Click"/>
-            <Button x:Name="Get_Status" Content="Get_Status" Click="Get_Status_Click"/>
-            <Button x:Name="SupplyCard" Content="SupplyCard" Click="SupplyCard_Click"/>
-            <Button x:Name="EjectCard" Content="EjectCard" Click="EjectCard_Click"/>
-            <Button x:Name="RejectCard" Content="RejectCard" Click="RejectCard_Click"/>
-            <Button x:Name="GetSensorStatus" Content="GetSensorStatus" Click="GetSensorStatus_Click"/>
-            <Button x:Name="RF_Ready_PositionF" Content="RF_Ready_PositionF" Click="RF_Ready_PositionF_Click"/>
-            <Button x:Name="RFM_CardCheck" Content="RFM_CardCheck" Click="RFM_CardCheck_Click"/>
-            <Button x:Name="RFM_PowerOn" Content="RFM_PowerOn" Click="RFM_PowerOn_Click"/>
-            <Button x:Name="RFM_Direct" Content="RFM_Direct" Click="RFM_Direct_Click"/>
-            <Button x:Name="RF_Ready_PositionB" Content="RF_Ready_PositionB" Click="RF_Ready_PositionB_Click"/>
-            <Button x:Name="RFM_PowerOff" Content="RFM_PowerOff" Click="RFM_PowerOff_Click"/>
-        </UniformGrid>
+        Title="Simple TP" Height="350" Width="525">
+    <Window.Resources>
+        <Storyboard x:Key="Loading" RepeatBehavior="Forever">
+            <DoubleAnimationUsingKeyFrames Storyboard.TargetProperty="(UIElement.RenderTransform).(TransformGroup.Children)[2].(RotateTransform.Angle)" Storyboard.TargetName="ellipse">
+                <EasingDoubleKeyFrame KeyTime="0" Value="0"/>
+                <EasingDoubleKeyFrame KeyTime="0:0:0.5" Value="360"/>
+            </DoubleAnimationUsingKeyFrames>
+        </Storyboard>
+    </Window.Resources>
+    <Window.Triggers>
+        <EventTrigger RoutedEvent="FrameworkElement.Loaded">
+            <BeginStoryboard Storyboard="{StaticResource Loading}"/>
+        </EventTrigger>
+    </Window.Triggers>
+    <Window.DataContext>
+        <local:TesterViewModel/>
+    </Window.DataContext>
+    <Grid Margin="0,50,0,0">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition />
+            <ColumnDefinition />
+        </Grid.ColumnDefinitions>
+        <Grid Grid.Column="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition/>
+                <ColumnDefinition/>
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition/>
+                <RowDefinition/>
+                <RowDefinition/>
+            </Grid.RowDefinitions>
+            <Button Content="연결 및 초기화" Command="{Binding ConnectCommand}" Grid.ColumnSpan="2"/>
+            <Button Content="카드 수납 준비" Command="{Binding StartReceiveCommand}" Grid.Row="1" Grid.Column="0"/>
+            <Button Content="카드 방출 준비" Command="{Binding StartDispenseCommand}" Grid.Row="1" Grid.Column="1"/>
+            <Button Content="카드 수납" Command="{Binding RejectCommand}" Grid.Row="2" Grid.Column="0"/>
+            <Button Content="카드 방출" Command="{Binding SupplyCommand}" Grid.Row="2" Grid.Column="1"/>
+        </Grid>
+
+        <Grid Grid.Column="1">
+            <TextBlock HorizontalAlignment="Left" VerticalAlignment="Top">
+                <Run>
+                    현재 수신 값:
+                </Run>
+                <Run Text="{Binding ReceivedUid}"
+                    />
+            </TextBlock>
+
+            <TextBox Background="Black"  Foreground="White" Margin="0,100,0,0" TextChanged="TextBox_TextChanged" TextWrapping="Wrap" Text="{Binding Log}" />
+
+            <Ellipse x:Name="ellipse" Visibility="{Binding LoadingVisibility}" RenderTransformOrigin="0.5,0.5">
+                <Ellipse.RenderTransform>
+                    <TransformGroup>
+                        <ScaleTransform/>
+                        <SkewTransform/>
+                        <RotateTransform/>
+                        <TranslateTransform/>
+                    </TransformGroup>
+                </Ellipse.RenderTransform>
+                <Ellipse.Fill>
+                    <LinearGradientBrush EndPoint="0.5,1" StartPoint="0.5,0">
+                        <GradientStop Color="#F3de32" Offset="0"/>
+                        <GradientStop Color="#00000000" Offset="1"/>
+                    </LinearGradientBrush>
+                </Ellipse.Fill>
+            </Ellipse>
+            <TextBlock HorizontalAlignment="Stretch" VerticalAlignment="Center" Text="{Binding LoadingText}" TextAlignment="Center" Background="Black" Foreground="White" Visibility="{Binding LoadingVisibility}"/>
+        </Grid>
     </Grid>
 </Window>
