@@ -84,7 +84,7 @@ namespace TesterProg
                   var res = await Dispenser.Initialize();
                   if (res)
                   {
-                      WriteLog("접속 및 초기화 성공");
+                      WriteLog("접속 및 초기화 성공. 화면을 클릭해주세요");
                   }
                   else
                   {
@@ -108,7 +108,7 @@ namespace TesterProg
                     var uid = Int64.Parse(data1, System.Globalization.NumberStyles.HexNumber).ToString();
                     if (uid.Length < 10)
                         uid = new string('0', 10 - uid.Length) + uid;
-                    WriteLog($"삽입 카드 UID 원문: {ReceivedUid} Decimal10DigitUid: {uid}");
+                    WriteLog($"삽입 카드 UID 원문: \n---{ReceivedUid}---\n Decimal10DigitUid: \n---{uid}---");
                 }
                 else
                 {
