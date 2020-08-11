@@ -1,0 +1,30 @@
+﻿<Window x:Class="TesterProg.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:TesterProg"
+        mc:Ignorable="d"
+        Title="MainWindow" Height="350" Width="525">
+    <Grid>
+        <UniformGrid>
+            <Button x:Name="GetNum" Content="GetNum" Click="GetNum_Click"/>
+            <Button x:Name="GetName" Content="GetDeviceName" Click="GetName_Click"/>
+            <Button x:Name="OpenDev" Content="OpenDev" Click="OpenDev_Click"/>
+            <Button x:Name="CloseDev" Content="CloseDev" Click="CloseDev_Click"/>
+            <Button x:Name="InitDev" Content="InitDev" Click="InitDev_Click"/>
+            <Button x:Name="Get_VersionInfo" Content="Get_VersionInfo" Click="Get_VersionInfo_Click"/>
+            <Button x:Name="Get_Status" Content="Get_Status" Click="Get_Status_Click"/>
+            <Button x:Name="SupplyCard" Content="SupplyCard" Click="SupplyCard_Click"/>
+            <Button x:Name="EjectCard" Content="EjectCard" Click="EjectCard_Click"/>
+            <Button x:Name="RejectCard" Content="RejectCard" Click="RejectCard_Click"/>
+            <Button x:Name="GetSensorStatus" Content="GetSensorStatus" Click="GetSensorStatus_Click"/>
+            <Button x:Name="RF_Ready_PositionF" Content="RF_Ready_PositionF" Click="RF_Ready_PositionF_Click"/>
+            <Button x:Name="RFM_CardCheck" Content="RFM_CardCheck" Click="RFM_CardCheck_Click"/>
+            <Button x:Name="RFM_PowerOn" Content="RFM_PowerOn" Click="RFM_PowerOn_Click"/>
+            <Button x:Name="RFM_Direct" Content="RFM_Direct" Click="RFM_Direct_Click"/>
+            <Button x:Name="RF_Ready_PositionB" Content="RF_Ready_PositionB" Click="RF_Ready_PositionB_Click"/>
+            <Button x:Name="RFM_PowerOff" Content="RFM_PowerOff" Click="RFM_PowerOff_Click"/>
+        </UniformGrid>
+    </Grid>
+</Window>
