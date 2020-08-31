@@ -58,6 +58,7 @@ namespace TesterProg
         public ICommand StartDispenseCommand { get; private set; }
         public ICommand RejectCommand { get; private set; }
         public ICommand SupplyCommand { get; private set; }
+        public ICommand SupplyCommand2 { get; private set; }
 
         private string _receivedUid;
         public string ReceivedUid
@@ -193,6 +194,29 @@ namespace TesterProg
             {
                 return Dispenser.IsInitialized;
             });
+
+            SupplyCommand2 = new RelayCommand<object>(async(x) =>
+              {
+                  LoadingVisibility = Visibility.Visible;
+                  LoadingText = "카드를 방출합니다";
+
+                  await Dispenser.WaitForDispenseCard();
+                  WriteLog("카드 대기 완료");
+                  await Dispenser.DispenseCurrentCard();
+                  WriteLog("현재 카드 방출 완료");
+
+                  LoadingVisibility = Visibility.Collapsed;
+              }, (x) =>
+              {
+                  return Dispenser.IsInitialized;
+              });
+            Dispenser.UidReceived += Dispenser_UidReceived;
+            Dispenser.LoggingAction = WriteLog;
+        }
+
+        private void Dispenser_UidReceived(object sender, TP7900InsertedCardUidEventArgs e)
+        {
+            WriteLog($"Received - {e.EventType}, {e.ReceivedData}");
         }
 
         private void WriteLog(string s)
