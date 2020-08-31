@@ -164,7 +164,7 @@ namespace TP7900APIWrapperForTD1000
             };
         }
 
-        public void SetCurrentEjectSpeed(EjectSpeedInfo speed)
+        public bool SetCurrentEjectSpeed(EjectSpeedInfo speed)
         {
             byte[] pTotalNumOfTray = new byte[100];
             byte[] pLoopFlag = new byte[100];
@@ -173,7 +173,7 @@ namespace TP7900APIWrapperForTD1000
             byte[] pTrayInfo = new byte[100];
             var res = TP7900.Get_TraySchedule(pTotalNumOfTray, pLoopFlag, ref pEjectLength, ref pEjectSpeed, pTrayInfo);
             var res2 = TP7900.Set_TraySchedule(pTotalNumOfTray[0], pLoopFlag[0], speed.EjectLength, speed.EjectSpeed, pTrayInfo);
-            //var res2=TP7900.S
+            return res2 == 0;
         }
 
         private async void CardEntryWatcher_Elapsed(object sender, ElapsedEventArgs e)
