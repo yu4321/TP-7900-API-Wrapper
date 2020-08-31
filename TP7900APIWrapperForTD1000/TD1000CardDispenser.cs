@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Timers;
 
 namespace TP7900APIWrapperForTD1000
 {
@@ -13,6 +14,18 @@ namespace TP7900APIWrapperForTD1000
         public event TP7900InsertedCardUidReceivedHandler UidReceived;
 
         public bool IsInitialized { get; private set; }
+
+        public bool IsDetecting
+        {
+            get
+            {
+                return CardEntryWatcher == null ? false : CardEntryWatcher.Enabled;
+            }
+        }
+
+        private Timer CardEntryWatcher;
+
+        bool isRunning = false;
 
         private async Task<bool> BoolReturnPromise(Func<int> func)
         {
@@ -120,8 +133,103 @@ namespace TP7900APIWrapperForTD1000
                     UidReceived(this, new TP7900InsertedCardUidEventArgs(null));
                 }
 
-                UidReceived(this,new TP7900InsertedCardUidEventArgs(data.Skip(1).Take(size[0] - 1).ToArray()));
+                UidReceived(this, new TP7900InsertedCardUidEventArgs(data.Skip(1).Take(size[0] - 1).ToArray()));
             });
+        }
+
+        public void StartDetectCardMode()
+        {
+            if (CardEntryWatcher == null)
+            {
+                LoggingAction("CardEntryWatcher Created");
+                CardEntryWatcher = new Timer(500);
+                CardEntryWatcher.Elapsed += CardEntryWatcher_Elapsed;
+            }
+            LoggingAction("StartDetectCardMode - Method");
+            CardEntryWatcher.Start();
+        }
+
+        public EjectSpeedInfo GetCurrentEjectSpeed()
+        {
+            byte[] pTotalNumOfTray = new byte[100];
+            byte[] pLoopFlag = new byte[100];
+            uint pEjectLength = 0;
+            uint pEjectSpeed = 0;
+            byte[] pTrayInfo = new byte[100];
+            var res = TP7900.Get_TraySchedule(pTotalNumOfTray, pLoopFlag, ref pEjectLength, ref pEjectSpeed, pTrayInfo);
+            return new EjectSpeedInfo()
+            {
+                EjectLength = pEjectLength,
+                EjectSpeed = pEjectSpeed
+            };
+        }
+
+        public void SetCurrentEjectSpeed(EjectSpeedInfo speed)
+        {
+            byte[] pTotalNumOfTray = new byte[100];
+            byte[] pLoopFlag = new byte[100];
+            uint pEjectLength = 0;
+            uint pEjectSpeed = 0;
+            byte[] pTrayInfo = new byte[100];
+            var res = TP7900.Get_TraySchedule(pTotalNumOfTray, pLoopFlag, ref pEjectLength, ref pEjectSpeed, pTrayInfo);
+            var res2 = TP7900.Set_TraySchedule(pTotalNumOfTray[0], pLoopFlag[0], speed.EjectLength, speed.EjectSpeed, pTrayInfo);
+            //var res2=TP7900.S
+        }
+
+        private async void CardEntryWatcher_Elapsed(object sender, ElapsedEventArgs e)
+        {
+            if (isRunning)
+            {
+                LoggingAction("Elapsed 중복 실행 방지");
+                return;
+            }
+            var pRailStatus = new byte[8];
+            var pFeedRollerStatus = new byte[8];
+            var pTraySensorStatus = new byte[8];
+
+            //CardEntryWatcher.
+            isRunning = true;
+            var statResult = await BoolReturnPromise(() => TP7900.GetSensorStatus(pRailStatus, pFeedRollerStatus, pTraySensorStatus));
+            if (statResult)
+            {
+                if (pRailStatus[0] == 1 && CardEntryWatcher.Enabled)
+                {
+                    LoggingAction("CardInsertDetected");
+                    var insertResult = await BoolReturnPromise(() => TP7900.RF_Ready_Position(0x31, false));
+                    if (!insertResult)
+                    {
+                        UidReceived(this, null);
+                    }
+                    else
+                    {
+                        var data = new byte[100];
+                        var size = new int[100];
+                        var getValueResult = await BoolReturnPromise(() => TP7900.RFM_DUAL_Power(true, 0, data, size));
+
+                        if (!getValueResult)
+                        {
+                            UidReceived(this, new TP7900InsertedCardUidEventArgs(null));
+                        }
+                        else
+                        {
+                            UidReceived(this, new TP7900InsertedCardUidEventArgs(data.Skip(1).Take(size[0] - 1).ToArray()));
+
+                        }
+                    }
+                }
+            }
+            isRunning = false;
+        }
+
+        public void EndDetectCardMode()
+        {
+            LoggingAction("EndDetectCardMode");
+            if (CardEntryWatcher != null)
+            {
+                if(CardEntryWatcher.Enabled)
+                    CardEntryWatcher.Stop();
+            }
+            //CardEntryWatcher = null;
         }
 
         public async Task<bool> DispenseCurrentCard()
@@ -192,5 +300,11 @@ namespace TP7900APIWrapperForTD1000
 
         public byte[] ReceivedData { get; set; }
 
+    }
+
+    public class EjectSpeedInfo
+    {
+        public uint EjectLength { get; set; }
+        public uint EjectSpeed { get; set; }
     }
 }

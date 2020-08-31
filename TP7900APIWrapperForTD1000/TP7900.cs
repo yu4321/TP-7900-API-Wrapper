@@ -57,5 +57,12 @@ namespace TP7900APIWrapperForTD1000
         [DllImport("TP7900.dll")]
         public static extern int RFM_DUAL_Power(bool bIsPower, int CardType, byte[] pRxData, int[] pRxSize);
 
+        [DllImport("TP7900.dll")]
+        public static extern int Get_TraySchedule(byte[] pTotalNumOfTray, byte[] pLoopFlag, ref uint pEjectLength, ref uint pEjectSpeed, byte[] pTrayInfo);
+
+        [DllImport("TP7900.dll")]
+        public static extern int Set_TraySchedule(byte nTotalNumOfTray, byte pLoopFlag, uint pEjectLength, uint pEjectSpeed, byte[] pTrayInfo);
+
+
     }
 }

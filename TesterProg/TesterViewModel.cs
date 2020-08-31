@@ -85,6 +85,7 @@ namespace TesterProg
                   if (res)
                   {
                       WriteLog("접속 및 초기화 성공. 화면을 클릭해주세요");
+                      Dispenser.StartDetectCardMode();
                   }
                   else
                   {
@@ -108,7 +109,11 @@ namespace TesterProg
                     var uid = Int64.Parse(data1, System.Globalization.NumberStyles.HexNumber).ToString();
                     if (uid.Length < 10)
                         uid = new string('0', 10 - uid.Length) + uid;
-                    WriteLog($"삽입 카드 UID 원문: \n---{ReceivedUid}---\n Decimal10DigitUid: \n---{uid}---");
+                    var data2 = BitConverter.ToString(res.ToArray()).Replace("-", string.Empty).ToUpper();
+                    var uid2 = Int64.Parse(data2, System.Globalization.NumberStyles.HexNumber).ToString();
+                    if (uid2.Length < 10)
+                        uid2 = new string('0', 10 - uid2.Length) + uid;
+                    WriteLog($"삽입 카드 UID 원문: \n---{ReceivedUid}---\n Reversed Decimal10DigitUid: \n---{uid}---\nDecimal10DigitUid: \n---{uid2}---\n");
                 }
                 else
                 {
