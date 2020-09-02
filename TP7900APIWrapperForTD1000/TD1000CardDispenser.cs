@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Timers;
 
@@ -23,30 +24,60 @@ namespace TP7900APIWrapperForTD1000
             }
         }
 
-        private Timer CardEntryWatcher;
+        private System.Timers.Timer CardEntryWatcher;
 
         private int lastEntryStatus = 0;
 
         bool isRunning = false;
 
+        TaskCompletionSource<bool> CardExtractedSource;
+
         private async Task<bool> BoolReturnPromise(Func<int> func)
         {
             var promise = new TaskCompletionSource<bool>();
-            await Task.Run(() =>
+
+            var cancelTokenSource = new CancellationTokenSource();
+
+            cancelTokenSource.CancelAfter(TimeSpan.FromSeconds(5));
+
+            using (cancelTokenSource.Token.Register(() => {
+                promise.TrySetCanceled();
+            }))
             {
-                var res = func.Invoke();
-                promise.SetResult(res == 0);
-            });
-            return await promise.Task;
+                Task.Run(() =>
+                {
+                    var res = func.Invoke();
+                    promise.SetResult(res == 0);
+                }, cancelTokenSource.Token);
+
+                try
+                {
+                    return await promise.Task;
+                }
+                catch (Exception e)
+                {
+                    LoggingAction($"Promise Timeout. {e.Message}. canceled");
+                    return false;
+                }
+            }
         }
 
-        public async Task<bool> Initialize()
+        public async Task<bool> Initialize(int port=0)
         {
-            var openResult = await BoolReturnPromise(() => TP7900.OpenDevice(2, 0, 1));
+            var openResult = port == 0 ? await BoolReturnPromise(() => TP7900.OpenDevice(2, 0, 1)) : await BoolReturnPromise(() => TP7900.OpenDevice(1, port, 1));
             if (openResult)
             {
-                IsInitialized = true;
-                return await BoolReturnPromise(() => TP7900.InitDevice());
+                bool isInit = await BoolReturnPromise(() => TP7900.InitDevice());
+                if (isInit)
+                {
+                    IsInitialized = true;
+                    return true;
+                }
+                else
+                {
+                    IsInitialized = false;
+                    return false;
+                }
             }
             lastEntryStatus = 0;
             return false;
@@ -69,7 +100,15 @@ namespace TP7900APIWrapperForTD1000
             var statResult = await BoolReturnPromise(() => TP7900.GetSensorStatus(pRailStatus, pFeedRollerStatus, pTraySensorStatus));
             if (statResult)
             {
-                return pTraySensorStatus[0] == 2;
+                LoggingAction("CanDispense - SensorStatus " + pTraySensorStatus[0]);
+                if(pTraySensorStatus[0] > 1)
+                {
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
             }
             else
             {
@@ -145,7 +184,7 @@ namespace TP7900APIWrapperForTD1000
             if (CardEntryWatcher == null)
             {
                 LoggingAction("CardEntryWatcher Created");
-                CardEntryWatcher = new Timer(500);
+                CardEntryWatcher = new System.Timers.Timer(500);
                 CardEntryWatcher.Elapsed += CardEntryWatcher_Elapsed;
             }
             LoggingAction("StartDetectCardMode - Method");
@@ -226,6 +265,11 @@ namespace TP7900APIWrapperForTD1000
                     else
                     {
                         LoggingAction("CardPickedDetected");
+                        if (CardExtractedSource != null)
+                        {
+                            LoggingAction("CardPick Task Resolved");
+                            CardExtractedSource.TrySetResult(true);
+                        }
                         UidReceived(this, new TP7900InsertedCardUidEventArgs(TP7900SignalTypes.PickUp));
                     }
                 }
@@ -243,6 +287,16 @@ namespace TP7900APIWrapperForTD1000
                     CardEntryWatcher.Stop();
             }
             //CardEntryWatcher = null;
+        }
+
+        public async Task<bool> WaitForCardPickup()
+        {
+            LoggingAction("Start Wait Card Pick Up");
+            CardExtractedSource = new TaskCompletionSource<bool>();
+            var res = await CardExtractedSource.Task;
+            LoggingAction("Finish Wait Card Pick Up");
+            CardExtractedSource = null;
+            return res;
         }
 
         public async Task<bool> DispenseCurrentCard()

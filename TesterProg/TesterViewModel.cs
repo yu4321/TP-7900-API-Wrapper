@@ -60,6 +60,8 @@ namespace TesterProg
         public ICommand SupplyCommand { get; private set; }
         public ICommand SupplyCommand2 { get; private set; }
 
+        public ICommand CheckCanDispenseCommand { get; private set; }
+
         private string _receivedUid;
         public string ReceivedUid
         {
@@ -82,7 +84,7 @@ namespace TesterProg
               {
                   LoadingVisibility = Visibility.Visible;
                   LoadingText = "기기 초기화 작업중입니다!";
-                  var res = await Dispenser.Initialize();
+                  var res = await Dispenser.Initialize(3);
                   if (res)
                   {
                       WriteLog("접속 및 초기화 성공. 화면을 클릭해주세요");
@@ -97,6 +99,20 @@ namespace TesterProg
               {
                   return !Dispenser.IsInitialized;
               });
+            CheckCanDispenseCommand = new RelayCommand<object>(async(x) =>
+            {
+                var res = await Dispenser.CanDispense();
+                if (res) {
+                    WriteLog("방출 가능");
+                }
+                else
+                {
+                    WriteLog("방출 불가");
+                }
+            }, (x) =>
+            {
+                return Dispenser.IsInitialized;
+            });
             StartReceiveCommand = new RelayCommand<object>(async (x) =>
             {
                 LoadingVisibility = Visibility.Visible;

@@ -30,6 +30,7 @@
         <UniformGrid Grid.Column="0" Columns="2">
            
             <Button Content="연결 및 초기화" Command="{Binding ConnectCommand}" Grid.ColumnSpan="2"/>
+            <Button Content="발급가능여부 확인" Command="{Binding CheckCanDispenseCommand}" Grid.ColumnSpan="2"/>
             <Button Content="카드 1장 방출" Command="{Binding SupplyCommand2}" Grid.Row="2" Grid.Column="1"/>
             <Button Content="카드 수납 준비" Command="{Binding StartReceiveCommand}" Grid.Row="1" Grid.Column="0"/>
             <Button Content="카드 방출 준비" Command="{Binding StartDispenseCommand}" Grid.Row="1" Grid.Column="1"/>
