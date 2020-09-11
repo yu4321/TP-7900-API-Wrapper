@@ -30,25 +30,48 @@ namespace TP7900APIWrapperForTD1000
 
         bool isRunning = false;
 
+        bool ignoreInsertDetection = false;
+
         TaskCompletionSource<bool> CardExtractedSource;
 
-        private async Task<bool> BoolReturnPromise(Func<int> func)
+        private async Task<bool> BoolReturnPromise(Func<int> func, int timeout=0)
         {
             var promise = new TaskCompletionSource<bool>();
 
-            var cancelTokenSource = new CancellationTokenSource();
-
-            cancelTokenSource.CancelAfter(TimeSpan.FromSeconds(5));
-
-            using (cancelTokenSource.Token.Register(() => {
-                promise.TrySetCanceled();
-            }))
+            if (timeout != 0)
             {
-                Task.Run(() =>
+                var cancelTokenSource = new CancellationTokenSource();
+
+                cancelTokenSource.CancelAfter(TimeSpan.FromSeconds(timeout));
+
+                using (cancelTokenSource.Token.Register(() => {
+                    promise.TrySetCanceled();
+                }))
+                {
+                    Task.Run(() =>
+                    {
+                        var res = func.Invoke();
+                        promise.SetResult(res == 0);
+                    }, cancelTokenSource.Token);
+
+                    try
+                    {
+                        return await promise.Task;
+                    }
+                    catch (Exception e)
+                    {
+                        LoggingAction($"Promise Timeout. {e.Message}. canceled");
+                        return false;
+                    }
+                }
+            }
+            else
+            {
+                await Task.Run(() =>
                 {
                     var res = func.Invoke();
                     promise.SetResult(res == 0);
-                }, cancelTokenSource.Token);
+                });
 
                 try
                 {
@@ -56,10 +79,12 @@ namespace TP7900APIWrapperForTD1000
                 }
                 catch (Exception e)
                 {
-                    LoggingAction($"Promise Timeout. {e.Message}. canceled");
+                    LoggingAction($"Non Timeout Promise Failed - "+e.Message);
                     return false;
                 }
             }
+
+          
         }
 
         public async Task<bool> Initialize(int port=0)
@@ -67,14 +92,16 @@ namespace TP7900APIWrapperForTD1000
             var openResult = port == 0 ? await BoolReturnPromise(() => TP7900.OpenDevice(2, 0, 1)) : await BoolReturnPromise(() => TP7900.OpenDevice(1, port, 1));
             if (openResult)
             {
-                bool isInit = await BoolReturnPromise(() => TP7900.InitDevice());
+                bool isInit = await BoolReturnPromise(() => TP7900.InitDevice(), 10);
                 if (isInit)
                 {
+                    LoggingAction("Initialize Success");
                     IsInitialized = true;
                     return true;
                 }
                 else
                 {
+                    LoggingAction("Initialize Failed");
                     IsInitialized = false;
                     return false;
                 }
@@ -86,6 +113,7 @@ namespace TP7900APIWrapperForTD1000
         public void Close()
         {
             IsInitialized = false;
+            LoggingAction("Device Closes");
             Task.Run(() =>
             {
                 TP7900.CloseDevice();
@@ -97,6 +125,7 @@ namespace TP7900APIWrapperForTD1000
             var pRailStatus = new byte[8];
             var pFeedRollerStatus = new byte[8];
             var pTraySensorStatus = new byte[8];
+            LoggingAction("CanDispense - Try");
             var statResult = await BoolReturnPromise(() => TP7900.GetSensorStatus(pRailStatus, pFeedRollerStatus, pTraySensorStatus));
             if (statResult)
             {
@@ -112,6 +141,7 @@ namespace TP7900APIWrapperForTD1000
             }
             else
             {
+                LoggingAction($"CanDispense - result {statResult}");
                 return false;
             }
         }
@@ -240,27 +270,35 @@ namespace TP7900APIWrapperForTD1000
                     if (lastEntryStatus == 1 && CardEntryWatcher.Enabled)
                     {
                         LoggingAction("CardInsertDetected");
-                        var insertResult = await BoolReturnPromise(() => TP7900.RF_Ready_Position(0x31, false));
-                        if (!insertResult)
+                        if (ignoreInsertDetection)
                         {
-                            UidReceived?.Invoke(this, null);
+                            LoggingAction("Ignored by Pickup Ready");
                         }
                         else
                         {
-                            var data = new byte[100];
-                            var size = new int[100];
-                            var getValueResult = await BoolReturnPromise(() => TP7900.RFM_DUAL_Power(true, 0, data, size));
-
-                            if (!getValueResult)
+                            var insertResult = await BoolReturnPromise(() => TP7900.RF_Ready_Position(0x31, false));
+                            if (!insertResult)
                             {
-                                UidReceived?.Invoke(this, new TP7900InsertedCardUidEventArgs(null));
+                                UidReceived?.Invoke(this, null);
                             }
                             else
                             {
-                                UidReceived?.Invoke(this, new TP7900InsertedCardUidEventArgs(data.Skip(1).Take(size[0] - 1).ToArray()));
+                                var data = new byte[100];
+                                var size = new int[100];
+                                var getValueResult = await BoolReturnPromise(() => TP7900.RFM_DUAL_Power(true, 0, data, size));
 
+                                if (!getValueResult)
+                                {
+                                    UidReceived?.Invoke(this, new TP7900InsertedCardUidEventArgs(null));
+                                }
+                                else
+                                {
+                                    UidReceived?.Invoke(this, new TP7900InsertedCardUidEventArgs(data.Skip(1).Take(size[0] - 1).ToArray()));
+
+                                }
                             }
                         }
+                       
                     }
                     else
                     {
@@ -283,19 +321,26 @@ namespace TP7900APIWrapperForTD1000
             LoggingAction("EndDetectCardMode");
             if (CardEntryWatcher != null)
             {
-                if(CardEntryWatcher.Enabled)
-                    CardEntryWatcher.Stop();
+                CardEntryWatcher.Stop();
             }
             //CardEntryWatcher = null;
         }
 
         public async Task<bool> WaitForCardPickup()
         {
-            LoggingAction("Start Wait Card Pick Up");
+            LoggingAction("Start Wait Card Pick Up. ignoreInsertDetecion");
+            ignoreInsertDetection = true;
             CardExtractedSource = new TaskCompletionSource<bool>();
             var res = await CardExtractedSource.Task;
             LoggingAction("Finish Wait Card Pick Up");
             CardExtractedSource = null;
+            Task.Run(async() =>
+            {
+                LoggingAction("IgnoreInsertDetection Release after 1 sec");
+                await Task.Delay(1000);
+                ignoreInsertDetection = false;
+                LoggingAction("IgnoreInsertDetection Released");
+            });
             return res;
         }
 
@@ -333,6 +378,14 @@ namespace TP7900APIWrapperForTD1000
                     if (IsInitialized)
                     {
                         Close();
+                        if (CardEntryWatcher != null)
+                        {
+                            CardEntryWatcher.Dispose();
+                            CardEntryWatcher = null;
+                        }
+                        CardExtractedSource = null;
+                        isRunning = false;
+                        lastEntryStatus = 0;
                     }
                 }
 
