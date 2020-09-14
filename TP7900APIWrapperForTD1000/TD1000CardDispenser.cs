@@ -32,6 +32,8 @@ namespace TP7900APIWrapperForTD1000
 
         bool ignoreInsertDetection = false;
 
+        bool ignoreRfModule = false;
+
         TaskCompletionSource<bool> CardExtractedSource;
 
         private async Task<bool> BoolReturnPromise(Func<int> func, int timeout=0)
@@ -87,8 +89,9 @@ namespace TP7900APIWrapperForTD1000
           
         }
 
-        public async Task<bool> Initialize(int port=0)
+        public async Task<bool> Initialize(bool isRfModuleIgnored, int port=0)
         {
+            ignoreRfModule = isRfModuleIgnored;
             var openResult = port == 0 ? await BoolReturnPromise(() => TP7900.OpenDevice(2, 0, 1)) : await BoolReturnPromise(() => TP7900.OpenDevice(1, port, 1));
             if (openResult)
             {
@@ -154,8 +157,14 @@ namespace TP7900APIWrapperForTD1000
                 return null;
             }
 
+            if (ignoreRfModule)
+            {
+                return null;
+            }
+
             var data = new byte[100];
             var size = new int[100];
+
             var getValueResult = await BoolReturnPromise(() => TP7900.RFM_DUAL_Power(true, 0, data, size));
 
             if (!getValueResult)
@@ -170,6 +179,11 @@ namespace TP7900APIWrapperForTD1000
         {
             var insertResult = await BoolReturnPromise(() => TP7900.RF_Ready_Position(0x31, true));
             if (!insertResult)
+            {
+                return null;
+            }
+
+            if (ignoreRfModule)
             {
                 return null;
             }
@@ -196,6 +210,12 @@ namespace TP7900APIWrapperForTD1000
                     UidReceived?.Invoke(this, null);
                 }
 
+                if (ignoreRfModule)
+                {
+                    UidReceived?.Invoke(this, new TP7900InsertedCardUidEventArgs(null));
+                    return;
+                }
+
                 var data = new byte[100];
                 var size = new int[100];
                 var getValueResult = await BoolReturnPromise(() => TP7900.RFM_DUAL_Power(true, 0, data, size));
@@ -203,6 +223,7 @@ namespace TP7900APIWrapperForTD1000
                 if (!getValueResult)
                 {
                     UidReceived?.Invoke(this, new TP7900InsertedCardUidEventArgs(null));
+                    return;
                 }
 
                 UidReceived?.Invoke(this, new TP7900InsertedCardUidEventArgs(data.Skip(1).Take(size[0] - 1).ToArray()));
@@ -283,6 +304,11 @@ namespace TP7900APIWrapperForTD1000
                             }
                             else
                             {
+                                if (ignoreRfModule)
+                                {
+                                    UidReceived?.Invoke(this, new TP7900InsertedCardUidEventArgs(null));
+                                    return;
+                                }
                                 var data = new byte[100];
                                 var size = new int[100];
                                 var getValueResult = await BoolReturnPromise(() => TP7900.RFM_DUAL_Power(true, 0, data, size));
