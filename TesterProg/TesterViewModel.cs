@@ -84,7 +84,7 @@ namespace TesterProg
               {
                   LoadingVisibility = Visibility.Visible;
                   LoadingText = "기기 초기화 작업중입니다!";
-                  var res = await Dispenser.Initialize(false, 1);
+                  var res = await Dispenser.Initialize(false, true, 1);
                   if (res)
                   {
                       WriteLog("접속 및 초기화 성공. 화면을 클릭해주세요");

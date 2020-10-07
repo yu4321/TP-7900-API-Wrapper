@@ -85,16 +85,20 @@ namespace TP7900APIWrapperForTD1000
                     return false;
                 }
             }
-
-          
         }
 
-        public async Task<bool> Initialize(bool isRfModuleIgnored, int port=0)
+        #region Init and Final
+        public async Task<bool> Initialize(bool tryRejectBeforeInit, bool isRfModuleIgnored, int port = 0)
         {
             ignoreRfModule = isRfModuleIgnored;
             var openResult = port == 0 ? await BoolReturnPromise(() => TP7900.OpenDevice(2, 0, 1)) : await BoolReturnPromise(() => TP7900.OpenDevice(1, port, 1));
             if (openResult)
             {
+                if (tryRejectBeforeInit)
+                {
+                    await BoolReturnPromise(() => TP7900.RejectCard(), 3);
+                }
+
                 bool isInit = await BoolReturnPromise(() => TP7900.InitDevice(), 10);
                 if (isInit)
                 {
@@ -122,36 +126,48 @@ namespace TP7900APIWrapperForTD1000
                 TP7900.CloseDevice();
             });
         }
+        #endregion
 
-        public async Task<bool> CanDispense()
+        #region Basic Card IO
+
+        public async Task<byte[]> ReadCurrentCardData()
         {
-            var pRailStatus = new byte[8];
-            var pFeedRollerStatus = new byte[8];
-            var pTraySensorStatus = new byte[8];
-            LoggingAction("CanDispense - Try");
-            var statResult = await BoolReturnPromise(() => TP7900.GetSensorStatus(pRailStatus, pFeedRollerStatus, pTraySensorStatus));
-            if (statResult)
+            if (ignoreRfModule)
             {
-                LoggingAction("CanDispense - SensorStatus " + pTraySensorStatus[0]);
-                if(pTraySensorStatus[0] > 1)
-                {
-                    return true;
-                }
-                else
-                {
-                    return false;
-                }
+                return null;
             }
             else
             {
-                LoggingAction($"CanDispense - result {statResult}");
-                return false;
+                var data = new byte[100];
+                var size = new int[100];
+
+                var getValueResult = await BoolReturnPromise(() => TP7900.RFM_DUAL_Power(true, 0, data, size));
+
+                if (!getValueResult)
+                {
+                    return null;
+                }
+
+                return data.Skip(1).Take(size[0] - 1).ToArray();
             }
         }
 
+        #endregion
+
+        public async Task<bool> JustConsumeCard()
+        {
+            return await BoolReturnPromise(() => TP7900.RF_Ready_Position(0x31, false));
+        }
+
+        public async Task<bool> ReadyDispenseCard()
+        {
+            return await BoolReturnPromise(() => TP7900.RF_Ready_Position(0x31, true));
+        }
+
+        #region Card Commands
         public async Task<byte[]> WaitForInsertCard()
         {
-            var insertResult= await BoolReturnPromise(() => TP7900.RF_Ready_Position(0x31, false));
+            var insertResult = await BoolReturnPromise(() => TP7900.RF_Ready_Position(0x31, false));
             if (!insertResult)
             {
                 return null;
@@ -200,47 +216,89 @@ namespace TP7900APIWrapperForTD1000
             return data.Skip(1).Take(size[0] - 1).ToArray();
         }
 
-        public void StartWaitingForCardInsertion()
+        public async Task<bool> DispenseCurrentCard()
         {
-            Task.Run(async() =>
-            {
-                var insertResult = await BoolReturnPromise(() => TP7900.RF_Ready_Position(0x31, false));
-                if (!insertResult)
-                {
-                    UidReceived?.Invoke(this, null);
-                }
-
-                if (ignoreRfModule)
-                {
-                    UidReceived?.Invoke(this, new TP7900InsertedCardUidEventArgs(null));
-                    return;
-                }
-
-                var data = new byte[100];
-                var size = new int[100];
-                var getValueResult = await BoolReturnPromise(() => TP7900.RFM_DUAL_Power(true, 0, data, size));
-
-                if (!getValueResult)
-                {
-                    UidReceived?.Invoke(this, new TP7900InsertedCardUidEventArgs(null));
-                    return;
-                }
-
-                UidReceived?.Invoke(this, new TP7900InsertedCardUidEventArgs(data.Skip(1).Take(size[0] - 1).ToArray()));
-            });
+            lastEntryStatus = 1;
+            return await BoolReturnPromise(() => TP7900.EjectCard());
         }
 
-        public void StartDetectCardMode()
+        public async Task<bool> RejectCurrentCard()
         {
-            if (CardEntryWatcher == null)
+            lastEntryStatus = 1;
+            return await BoolReturnPromise(() => TP7900.RejectCard());
+        }
+
+        public async Task<bool> AcceptCurrentCard()
+        {
+            return await RejectCurrentCard();
+        }
+
+        public async Task<bool> RevertCurrentCard()
+        {
+            return await DispenseCurrentCard();
+        }
+
+        #endregion
+
+        #region StatusCheck
+        /// <summary>
+        /// 1: pRailStatus 2: pFeedRollerStatus 3: pTraySensorStatus
+        /// </summary>
+        /// <returns></returns>
+        private async Task<SensorStatus> GetSensorStatus()
+        {
+            var pRailStatus = new byte[8];
+            var pFeedRollerStatus = new byte[8];
+            var pTraySensorStatus = new byte[8];
+            var statResult = await BoolReturnPromise(() => TP7900.GetSensorStatus(pRailStatus, pFeedRollerStatus, pTraySensorStatus));
+            if (statResult)
             {
-                LoggingAction("CardEntryWatcher Created");
-                CardEntryWatcher = new System.Timers.Timer(500);
-                CardEntryWatcher.Elapsed += CardEntryWatcher_Elapsed;
+                LoggingAction($"GetSensorStatus Result : Rail {BitConverter.ToString(pRailStatus)}, Roller {BitConverter.ToString(pFeedRollerStatus)}, Tray {BitConverter.ToString(pTraySensorStatus)}");
+                return new SensorStatus(pRailStatus, pFeedRollerStatus, pTraySensorStatus);
             }
-            LoggingAction("StartDetectCardMode - Method");
-            CardEntryWatcher.Start();
+            else
+            {
+                LoggingAction($"GetSensorStatus Result False");
+                return null;
+            }
         }
+
+        public async Task<bool> CanDispense()
+        {
+            LoggingAction("CanDispense - Try");
+            var status = await GetSensorStatus();
+            if (status != null)
+            {
+                if (status.TraySensorStatus[0] > 1)
+                {
+                    LoggingAction("CanDispense True");
+                    return true;
+                }
+            }
+            LoggingAction("CanDispense False");
+            return false;
+        }
+
+        public async Task<bool> IsCardInserted()
+        {
+            LoggingAction("IsCardInserted - Try");
+            var status = await GetSensorStatus();
+            if (status != null)
+            {
+                if(lastEntryStatus!=status.RailStatus[0] && (status.RailStatus[0] ==1 || status.RailStatus[0] == 0))
+                {
+                    lastEntryStatus = status.RailStatus[0];
+                    if (lastEntryStatus == 1)
+                    {
+                        LoggingAction("IsCardInserted True");
+                        return true;
+                    }
+                }
+            }
+            LoggingAction("IsCardInserted False");
+            return false;
+        }
+
 
         public EjectSpeedInfo GetCurrentEjectSpeed()
         {
@@ -269,77 +327,19 @@ namespace TP7900APIWrapperForTD1000
             return res2 == 0;
         }
 
-        private async void CardEntryWatcher_Elapsed(object sender, ElapsedEventArgs e)
+        #endregion
+
+        #region AutoCheckMode
+        public void StartDetectCardMode()
         {
-            if (isRunning)
+            if (CardEntryWatcher == null)
             {
-                //LoggingAction("Elapsed 중복 실행 방지");
-                return;
+                LoggingAction("CardEntryWatcher Created");
+                CardEntryWatcher = new System.Timers.Timer(500);
+                CardEntryWatcher.Elapsed += CardEntryWatcher_Elapsed;
             }
-            var pRailStatus = new byte[8];
-            var pFeedRollerStatus = new byte[8];
-            var pTraySensorStatus = new byte[8];
-
-            //CardEntryWatcher.
-            isRunning = true;
-            var statResult = await BoolReturnPromise(() => TP7900.GetSensorStatus(pRailStatus, pFeedRollerStatus, pTraySensorStatus));
-            if (statResult)
-            {
-                if (lastEntryStatus != pRailStatus[0] && (pRailStatus[0] == 1 || pRailStatus[0] == 0))
-                {
-                    lastEntryStatus = pRailStatus[0];
-                    if (lastEntryStatus == 1 && CardEntryWatcher.Enabled)
-                    {
-                        LoggingAction("CardInsertDetected");
-                        if (ignoreInsertDetection)
-                        {
-                            LoggingAction("Ignored by Pickup Ready");
-                        }
-                        else
-                        {
-                            var insertResult = await BoolReturnPromise(() => TP7900.RF_Ready_Position(0x31, false));
-                            if (!insertResult)
-                            {
-                                UidReceived?.Invoke(this, null);
-                            }
-                            else
-                            {
-                                if (ignoreRfModule)
-                                {
-                                    UidReceived?.Invoke(this, new TP7900InsertedCardUidEventArgs(null));
-                                    return;
-                                }
-                                var data = new byte[100];
-                                var size = new int[100];
-                                var getValueResult = await BoolReturnPromise(() => TP7900.RFM_DUAL_Power(true, 0, data, size));
-
-                                if (!getValueResult)
-                                {
-                                    UidReceived?.Invoke(this, new TP7900InsertedCardUidEventArgs(null));
-                                }
-                                else
-                                {
-                                    UidReceived?.Invoke(this, new TP7900InsertedCardUidEventArgs(data.Skip(1).Take(size[0] - 1).ToArray()));
-
-                                }
-                            }
-                        }
-                       
-                    }
-                    else
-                    {
-                        LoggingAction("CardPickedDetected");
-                        if (CardExtractedSource != null)
-                        {
-                            LoggingAction("CardPick Task Resolved");
-                            CardExtractedSource.TrySetResult(true);
-                        }
-                        UidReceived(this, new TP7900InsertedCardUidEventArgs(TP7900SignalTypes.PickUp));
-                    }
-                }
-               
-            }
-            isRunning = false;
+            LoggingAction("StartDetectCardMode - Method");
+            CardEntryWatcher.Start();
         }
 
         public void EndDetectCardMode()
@@ -349,9 +349,16 @@ namespace TP7900APIWrapperForTD1000
             {
                 CardEntryWatcher.Stop();
             }
-            //CardEntryWatcher = null;
         }
 
+        #endregion
+
+        #region Card Pickup Waiter
+
+        /// <summary>
+        /// CannotWork Without CardEntryWatcher_Elapsed Working
+        /// </summary>
+        /// <returns></returns>
         public async Task<bool> WaitForCardPickup()
         {
             LoggingAction("Start Wait Card Pick Up. ignoreInsertDetecion");
@@ -360,7 +367,7 @@ namespace TP7900APIWrapperForTD1000
             var res = await CardExtractedSource.Task;
             LoggingAction("Finish Wait Card Pick Up");
             CardExtractedSource = null;
-            Task.Run(async() =>
+            Task.Run(async () =>
             {
                 LoggingAction("IgnoreInsertDetection Release after 1 sec");
                 await Task.Delay(1000);
@@ -370,27 +377,85 @@ namespace TP7900APIWrapperForTD1000
             return res;
         }
 
-        public async Task<bool> DispenseCurrentCard()
+        #endregion
+
+        #region Misc.
+
+        private async void CardEntryWatcher_Elapsed(object sender, ElapsedEventArgs e)
         {
-            lastEntryStatus = 1;
-            return await BoolReturnPromise(() => TP7900.EjectCard());
+            if (isRunning)
+            {
+                //LoggingAction("Elapsed 중복 실행 방지");
+                return;
+            }
+
+            isRunning = true;
+            if (await IsCardInserted())
+            {
+                if (CardEntryWatcher.Enabled)
+                {
+                    LoggingAction("CardInsertDetected");
+                    if (ignoreInsertDetection)
+                    {
+                        LoggingAction("Ignored by Pickup Ready");
+                    }
+                    else
+                    {
+                        var insertResult = await JustConsumeCard();
+                        if (!insertResult)
+                        {
+                            UidReceived?.Invoke(this, null);
+                        }
+                        else
+                        {
+                            UidReceived?.Invoke(this, new TP7900InsertedCardUidEventArgs(await ReadCurrentCardData()));
+                        }
+                    }
+                }
+                else
+                {
+                    LoggingAction("CardPickedDetected");
+                    if (CardExtractedSource != null)
+                    {
+                        LoggingAction("CardPick Task Resolved");
+                        CardExtractedSource.TrySetResult(true);
+                    }
+                    UidReceived(this, new TP7900InsertedCardUidEventArgs(TP7900SignalTypes.PickUp));
+                }
+            }
+            isRunning = false;
         }
 
-        public async Task<bool> RejectCurrentCard()
+        public void StartWaitingForCardInsertion()
         {
-            lastEntryStatus = 1;
-            return await BoolReturnPromise(() => TP7900.RejectCard());
-        }
+            Task.Run(async () =>
+            {
+                var insertResult = await BoolReturnPromise(() => TP7900.RF_Ready_Position(0x31, false));
+                if (!insertResult)
+                {
+                    UidReceived?.Invoke(this, null);
+                }
 
-        public async Task<bool> AcceptCurrentCard()
-        {
-            return await BoolReturnPromise(() => TP7900.RejectCard());
-        }
+                if (ignoreRfModule)
+                {
+                    UidReceived?.Invoke(this, new TP7900InsertedCardUidEventArgs(null));
+                    return;
+                }
 
-        public async Task<bool> RevertCurrentCard()
-        {
-            return await BoolReturnPromise(() => TP7900.EjectCard());
+                var data = new byte[100];
+                var size = new int[100];
+                var getValueResult = await BoolReturnPromise(() => TP7900.RFM_DUAL_Power(true, 0, data, size));
+
+                if (!getValueResult)
+                {
+                    UidReceived?.Invoke(this, new TP7900InsertedCardUidEventArgs(null));
+                    return;
+                }
+
+                UidReceived?.Invoke(this, new TP7900InsertedCardUidEventArgs(data.Skip(1).Take(size[0] - 1).ToArray()));
+            });
         }
+        #endregion
 
         #region IDisposable Support
         private bool disposedValue = false; // 중복 호출을 검색하려면
@@ -465,5 +530,26 @@ namespace TP7900APIWrapperForTD1000
     {
         public uint EjectLength { get; set; }
         public uint EjectSpeed { get; set; }
+    }
+
+    public class SensorStatus
+    {
+        public byte[] RailStatus { get; set; }
+        public byte[] FeedRollerStatus { get; set; }
+        public byte[] TraySensorStatus { get; set; }
+
+        public SensorStatus()
+        {
+            RailStatus = null;
+            FeedRollerStatus = null;
+            TraySensorStatus = null;
+        }
+
+        public SensorStatus(byte[] pRailStatus, byte[] pFeedRollerStatus, byte[] pTraySensorStatus)
+        {
+            RailStatus = pRailStatus;
+            FeedRollerStatus = pFeedRollerStatus;
+            TraySensorStatus = pTraySensorStatus;
+        }
     }
 }
