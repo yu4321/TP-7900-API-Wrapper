@@ -400,10 +400,10 @@ namespace TP7900APIWrapperForTD1000
             var statResult = await GetSensorStatus();
             if (statResult != null)
             {
-                if(lastEntryStatus!=statResult.RailStatus[0] && (statResult.RailStatus[0] == 1 || statResult.RailStatus[0] == 0))
+                if (lastEntryStatus != statResult.RailStatus[0] && (statResult.RailStatus[0] == 1 || statResult.RailStatus[0] == 0)) 
                 {
                     lastEntryStatus = statResult.RailStatus[0];
-                    if(lastEntryStatus==1 && CardEntryWatcher.Enabled)
+                    if (lastEntryStatus == 1 && CardEntryWatcher.Enabled) 
                     {
                         LoggingAction("CardInsertDetected");
                         if (ignoreInsertDetection)
@@ -434,6 +434,18 @@ namespace TP7900APIWrapperForTD1000
                         UidReceived(this, new TP7900InsertedCardUidEventArgs(TP7900SignalTypes.PickUp));
                     }
                 }
+                else
+                {
+                    if(statResult.RailStatus[0] == 0x11)
+                    {
+                        LoggingAction($"카드 이미 끝까지 들어가있음. 강제로 투입처리");
+                        UidReceived?.Invoke(this, new TP7900InsertedCardUidEventArgs(await ReadCurrentCardData()));
+                    }
+                }
+            }
+            else
+            {
+                LoggingAction("GetSensorStatus Null");
             }
             isRunning = false;
         }
