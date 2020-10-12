@@ -102,13 +102,13 @@ namespace TP7900APIWrapperForTD1000
                 bool isInit = await BoolReturnPromise(() => TP7900.InitDevice(), 10);
                 if (isInit)
                 {
-                    LoggingAction("Initialize Success");
+                    LoggingAction($"Initialize Success - tryRejectBeforeInit {tryRejectBeforeInit}, isRfModuleIgnored {isRfModuleIgnored}, port {port}");
                     IsInitialized = true;
                     return true;
                 }
                 else
                 {
-                    LoggingAction("Initialize Failed");
+                    LoggingAction("Initialize Failed  - tryRejectBeforeInit {tryRejectBeforeInit}, isRfModuleIgnored {isRfModuleIgnored}, port {port}");
                     IsInitialized = false;
                     return false;
                 }
@@ -255,7 +255,7 @@ namespace TP7900APIWrapperForTD1000
             var statResult = await BoolReturnPromise(() => TP7900.GetSensorStatus(pRailStatus, pFeedRollerStatus, pTraySensorStatus));
             if (statResult)
             {
-                LoggingAction($"GetSensorStatus Result : Rail {BitConverter.ToString(pRailStatus)}, Roller {BitConverter.ToString(pFeedRollerStatus)}, Tray {BitConverter.ToString(pTraySensorStatus)}");
+                //LoggingAction($"GetSensorStatus Result : Rail {BitConverter.ToString(pRailStatus)}, Roller {BitConverter.ToString(pFeedRollerStatus)}, Tray {BitConverter.ToString(pTraySensorStatus)}");
                 return new SensorStatus(pRailStatus, pFeedRollerStatus, pTraySensorStatus);
             }
             else
@@ -281,24 +281,28 @@ namespace TP7900APIWrapperForTD1000
             return false;
         }
 
-        public async Task<bool> IsCardInserted()
+        public async Task<bool?> IsCardInserted()
         {
-            LoggingAction("IsCardInserted - Try");
+            //LoggingAction("IsCardInserted - Try");
             var status = await GetSensorStatus();
             if (status != null)
             {
-                if(lastEntryStatus!=status.RailStatus[0] && (status.RailStatus[0] ==1 || status.RailStatus[0] == 0))
+                if (lastEntryStatus != status.RailStatus[0] && (status.RailStatus[0] == 1 || status.RailStatus[0] == 0)) 
                 {
                     lastEntryStatus = status.RailStatus[0];
                     if (lastEntryStatus == 1)
                     {
-                        LoggingAction("IsCardInserted True");
+                        //LoggingAction("IsCardInserted True");
                         return true;
                     }
                 }
+                else
+                {
+                    return false;
+                }
             }
-            LoggingAction("IsCardInserted False");
-            return false;
+            //LoggingAction("IsCardInserted False");
+            return null;
         }
 
 
@@ -392,37 +396,43 @@ namespace TP7900APIWrapperForTD1000
             }
 
             isRunning = true;
-            if (await IsCardInserted())
+
+            var statResult = await GetSensorStatus();
+            if (statResult != null)
             {
-                if (CardEntryWatcher.Enabled)
+                if(lastEntryStatus!=statResult.RailStatus[0] && (statResult.RailStatus[0] == 1 || statResult.RailStatus[0] == 0))
                 {
-                    LoggingAction("CardInsertDetected");
-                    if (ignoreInsertDetection)
+                    lastEntryStatus = statResult.RailStatus[0];
+                    if(lastEntryStatus==1 && CardEntryWatcher.Enabled)
                     {
-                        LoggingAction("Ignored by Pickup Ready");
-                    }
-                    else
-                    {
-                        var insertResult = await JustConsumeCard();
-                        if (!insertResult)
+                        LoggingAction("CardInsertDetected");
+                        if (ignoreInsertDetection)
                         {
-                            UidReceived?.Invoke(this, null);
+                            LoggingAction("Ignored by Pickup Ready");
                         }
                         else
                         {
-                            UidReceived?.Invoke(this, new TP7900InsertedCardUidEventArgs(await ReadCurrentCardData()));
+                            var insertResult = await JustConsumeCard();
+                            if (!insertResult)
+                            {
+                                UidReceived?.Invoke(this, null);
+                            }
+                            else
+                            {
+                                UidReceived?.Invoke(this, new TP7900InsertedCardUidEventArgs(await ReadCurrentCardData()));
+                            }
                         }
                     }
-                }
-                else
-                {
-                    LoggingAction("CardPickedDetected");
-                    if (CardExtractedSource != null)
+                    else
                     {
-                        LoggingAction("CardPick Task Resolved");
-                        CardExtractedSource.TrySetResult(true);
+                        LoggingAction("CardPickedDetected");
+                        if (CardExtractedSource != null)
+                        {
+                            LoggingAction("CardPick Task Resolved");
+                            CardExtractedSource.TrySetResult(true);
+                        }
+                        UidReceived(this, new TP7900InsertedCardUidEventArgs(TP7900SignalTypes.PickUp));
                     }
-                    UidReceived(this, new TP7900InsertedCardUidEventArgs(TP7900SignalTypes.PickUp));
                 }
             }
             isRunning = false;
