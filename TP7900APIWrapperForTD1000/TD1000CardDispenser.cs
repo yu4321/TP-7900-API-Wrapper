@@ -436,10 +436,18 @@ namespace TP7900APIWrapperForTD1000
                 }
                 else
                 {
-                    if(statResult.RailStatus[0] == 0x11)
+                    if (statResult.RailStatus[0] == 0x11) 
                     {
+                        lastEntryStatus = 1;
                         LoggingAction($"카드 이미 끝까지 들어가있음. 강제로 투입처리");
                         UidReceived?.Invoke(this, new TP7900InsertedCardUidEventArgs(await ReadCurrentCardData()));
+                    }
+                    else
+                    {
+                        if (statResult.RailStatus[0] != 0x00)
+                        {
+                            LoggingAction($"이상경우:  Rail {BitConverter.ToString(statResult.RailStatus)}, Roller {BitConverter.ToString(statResult.FeedRollerStatus)}, Tray {BitConverter.ToString(statResult.TraySensorStatus)}");
+                        }
                     }
                 }
             }
