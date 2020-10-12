@@ -152,8 +152,6 @@ namespace TP7900APIWrapperForTD1000
             }
         }
 
-        #endregion
-
         public async Task<bool> JustConsumeCard()
         {
             return await BoolReturnPromise(() => TP7900.RF_Ready_Position(0x31, false));
@@ -163,6 +161,10 @@ namespace TP7900APIWrapperForTD1000
         {
             return await BoolReturnPromise(() => TP7900.RF_Ready_Position(0x31, true));
         }
+
+
+        #endregion
+
 
         #region Card Commands
         public async Task<byte[]> WaitForInsertCard()
