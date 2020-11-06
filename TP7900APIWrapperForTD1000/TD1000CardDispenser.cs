@@ -369,6 +369,11 @@ namespace TP7900APIWrapperForTD1000
         {
             LoggingAction("Start Wait Card Pick Up. ignoreInsertDetecion");
             ignoreInsertDetection = true;
+            if (CardEntryWatcher == null || CardEntryWatcher.Enabled == false)
+            {
+                LoggingAction("StartDetectCardMode for Card waiter");
+                StartDetectCardMode();
+            }
             CardExtractedSource = new TaskCompletionSource<bool>();
             var res = await CardExtractedSource.Task;
             LoggingAction("Finish Wait Card Pick Up");
